@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TIFF Folder Inspector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent: #38bdf8;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: #f1f5f9;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        tr:hover {
+            background: rgba(56, 189, 248, 0.05);
+        }
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="mb-8 text-center md:text-left flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-white mb-2">TIFF Batch Inspector</h1>
+                <p class="text-slate-400">Upload a folder to calculate TIFF file dimensions and totals</p>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row gap-3 items-center">
+                <div class="flex flex-col items-start bg-slate-800 p-2 rounded-lg border border-slate-700">
+                    <span class="text-[10px] text-slate-400 uppercase font-bold ml-1 mb-1">Price Per Foot (Ks)</span>
+                    <input type="number" id="priceInput" value="0" min="0" 
+                        class="bg-transparent border-none text-emerald-400 font-bold text-lg focus:ring-0 w-32 outline-none px-1"
+                        oninput="updateUI()">
+                </div>
+                <label class="cursor-pointer bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-lg flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8.8s3.7.5 4.4 1.2c.6.7.8 1.8.8 1.8V20Z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
+                    Upload Folder
+                    <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
+                </label>
+                <button id="clearBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-6 py-3 rounded-lg font-medium transition-all">
+                    Clear List
+                </button>
+            </div>
+        </header>
+
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="glass-panel p-6 rounded-2xl">
+                <div class="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Total Items (Incl. Qty)</div>
+                <div id="statCount" class="text-3xl font-bold text-white">0</div>
+            </div>
+            <div class="glass-panel p-6 rounded-2xl border-sky-900/30">
+                <div class="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Total (Inches)</div>
+                <div id="statTotalHeight" class="text-3xl font-bold text-sky-400">0.00"</div>
+            </div>
+            <div class="glass-panel p-6 rounded-2xl border-emerald-900/30">
+                <div class="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Total (Feet)</div>
+                <div id="statTotalFeet" class="text-3xl font-bold text-emerald-400">0.00'</div>
+            </div>
+            <div class="glass-panel p-6 rounded-2xl border-yellow-900/30">
+                <div class="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Total Cost (Kyats)</div>
+                <div id="statTotalCost" class="text-3xl font-bold text-yellow-400">0</div>
+            </div>
+        </div>
+
+        <!-- Table Section -->
+        <div class="glass-panel rounded-2xl overflow-hidden shadow-2xl">
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-800/50 text-slate-300 text-sm uppercase tracking-tight">
+                            <th class="p-4 font-semibold border-b border-slate-700 w-12 text-center">#</th>
+                            <th class="p-4 font-semibold border-b border-slate-700">File Name</th>
+                            <th class="p-4 font-semibold border-b border-slate-700 text-center">DPI</th>
+                            <th class="p-4 font-semibold border-b border-slate-700 text-center w-24">Qty</th>
+                            <th class="p-4 font-semibold border-b border-slate-700 text-right text-sky-400">Inch (Total)</th>
+                            <th class="p-4 font-semibold border-b border-slate-700 text-right text-emerald-400">Feet (Total)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fileTableBody" class="divide-y divide-slate-800 text-slate-300">
+                        <tr id="emptyState">
+                            <td colspan="6" class="p-12 text-center text-slate-500 italic">
+                                No files loaded. Click "Upload Folder" to begin.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center z-50">
+            <div class="bg-slate-800 p-8 rounded-2xl shadow-2xl text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-4 border-sky-500 border-t-transparent mx-auto mb-4"></div>
+                <p class="text-lg font-medium text-white">Analyzing TIFF files...</p>
+                <p id="loadingStatus" class="text-sm text-slate-400 mt-2">Initializing...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let fileResults = [];
+
+        async function getTiffMetadata(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const buffer = e.target.result;
+                    const view = new DataView(buffer);
+                    
+                    let le = true;
+                    if (view.getUint16(0) === 0x4D4D) {
+                        le = false;
+                    } else if (view.getUint16(0) !== 0x4949) {
+                        return resolve(null);
+                    }
+
+                    let ifdOffset = view.getUint32(4, le);
+                    const numEntries = view.getUint16(ifdOffset, le);
+                    
+                    let height = 0, yRes = 300, resUnit = 2;
+
+                    for (let i = 0; i < numEntries; i++) {
+                        const entryOffset = ifdOffset + 2 + (i * 12);
+                        const tag = view.getUint16(entryOffset, le);
+                        const type = view.getUint16(entryOffset + 2, le);
+                        
+                        if (tag === 257) height = getVal(view, entryOffset + 8, type, le);
+                        if (tag === 283) yRes = getRational(view, view.getUint32(entryOffset + 8, le), le);
+                        if (tag === 296) resUnit = getVal(view, entryOffset + 8, type, le);
+                    }
+
+                    if (resUnit === 3) { yRes *= 2.54; }
+
+                    const unitInch = (height / yRes);
+
+                    resolve({
+                        id: Math.random().toString(36).substr(2, 9),
+                        name: file.name,
+                        dpi: Math.round(yRes),
+                        unitInch: unitInch,
+                        qty: 1
+                    });
+                };
+                reader.readAsArrayBuffer(file.slice(0, 40960)); 
+            });
+        }
+
+        function getVal(view, offset, type, le) {
+            if (type === 3) return view.getUint16(offset, le);
+            if (type === 4) return view.getUint32(offset, le);
+            return 0;
+        }
+
+        function getRational(view, offset, le) {
+            const num = view.getUint32(offset, le);
+            const den = view.getUint32(offset + 4, le);
+            return num / den;
+        }
+
+        const folderInput = document.getElementById('folderInput');
+        const priceInput = document.getElementById('priceInput');
+        const fileTableBody = document.getElementById('fileTableBody');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingStatus = document.getElementById('loadingStatus');
+        
+        const statCount = document.getElementById('statCount');
+        const statTotalHeight = document.getElementById('statTotalHeight');
+        const statTotalFeet = document.getElementById('statTotalFeet');
+        const statTotalCost = document.getElementById('statTotalCost');
+
+        function updateUI() {
+            if (fileResults.length === 0) {
+                fileTableBody.innerHTML = `<tr id="emptyState"><td colspan="6" class="p-12 text-center text-slate-500 italic">No files loaded. Click "Upload Folder" to begin.</td></tr>`;
+                resetStats();
+                return;
+            }
+
+            fileTableBody.innerHTML = '';
+            let totalInches = 0;
+            let totalQty = 0;
+
+            fileResults.forEach((res, index) => {
+                const rowInchTotal = res.unitInch * res.qty;
+                const rowFeetTotal = rowInchTotal / 12;
+                totalInches += rowInchTotal;
+                totalQty += res.qty;
+
+                const row = document.createElement('tr');
+                row.className = "hover:bg-slate-800/30 transition-colors";
+                row.innerHTML = `
+                    <td class="p-4 text-slate-500 text-sm text-center">${index + 1}</td>
+                    <td class="p-4 font-medium text-white break-all">${res.name}</td>
+                    <td class="p-4 text-center text-slate-400">${res.dpi}</td>
+                    <td class="p-4 text-center">
+                        <input type="number" value="${res.qty}" min="1" 
+                            class="w-16 bg-slate-900 border border-slate-700 rounded p-1 text-center text-white focus:border-sky-500 focus:outline-none"
+                            onchange="updateQty('${res.id}', this.value)">
+                    </td>
+                    <td class="p-4 text-right font-mono text-sky-400 font-bold">${rowInchTotal.toFixed(2)}"</td>
+                    <td class="p-4 text-right font-mono text-emerald-400 font-bold">${rowFeetTotal.toFixed(3)}'</td>
+                `;
+                fileTableBody.appendChild(row);
+            });
+
+            const totalFeet = totalInches / 12;
+            const pricePerFoot = parseFloat(priceInput.value) || 0;
+            const totalCost = totalFeet * pricePerFoot;
+
+            statCount.textContent = totalQty;
+            statTotalHeight.textContent = totalInches.toFixed(2) + '"';
+            statTotalFeet.textContent = totalFeet.toFixed(2) + "'";
+            statTotalCost.textContent = Math.round(totalCost).toLocaleString();
+        }
+
+        window.updateQty = (id, newQty) => {
+            const val = parseInt(newQty);
+            const index = fileResults.findIndex(r => r.id === id);
+            if (index !== -1 && val > 0) {
+                fileResults[index].qty = val;
+                updateUI();
+            }
+        };
+
+        function resetStats() {
+            statCount.textContent = '0';
+            statTotalHeight.textContent = '0.00"';
+            statTotalFeet.textContent = "0.00'";
+            statTotalCost.textContent = "0";
+        }
+
+        folderInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files).filter(f => 
+                f.name.toLowerCase().endsWith('.tif') || f.name.toLowerCase().endsWith('.tiff')
+            );
+
+            if (files.length === 0) return;
+
+            loadingOverlay.classList.remove('hidden');
+            fileResults = [];
+
+            for (let i = 0; i < files.length; i++) {
+                loadingStatus.textContent = `Processing ${i+1} of ${files.length} files...`;
+                const meta = await getTiffMetadata(files[i]);
+                if (meta) fileResults.push(meta);
+            }
+
+            loadingOverlay.classList.add('hidden');
+            updateUI();
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            fileResults = [];
+            folderInput.value = '';
+            updateUI();
+        });
+    </script>
+</body>
+</html>
